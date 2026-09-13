@@ -1,11 +1,14 @@
 node_modules
 .next
+.open-next
+.wrangler
 out
 .env
 .env.local
 .env.*.local
 .arga-session.json
 .env.arga-backup
+cloudflare-env.d.ts
 coverage
 *.log
 .DS_Store

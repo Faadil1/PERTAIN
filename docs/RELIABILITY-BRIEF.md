@@ -1,140 +1,177 @@
 # PERTAIN — System & Reliability Brief
 
 Date: 2026-09-13
-Hackathon: Multi-App AI Agent Hackathon
-Status: build in progress
+Build: Multi-App AI Agent Hackathon
+Status: `PBPD_BUILD_IN_PROGRESS__EXTERNAL_PROOF_PENDING`
 
-## What PERTAIN does
+## 1. Product invariant
 
-PERTAIN takes one proposed incident update and determines which intended customers the exact statement is actually supported for before any customer-facing side effect is allowed.
+> **Missing, stale or contradictory required evidence never becomes `ALLOW`.**
 
-Core proof:
+PERTAIN evaluates one outgoing incident statement separately for each intended customer before permitting a bounded outbound action.
 
-> **Same message. Three customers. ALLOW / HOLD / UNKNOWN.**
+## 2. Evidence classes
 
-Hero message:
+PERTAIN keeps these classes separate:
 
-> `Your production workflows are fully restored.`
+1. **Observed external or fixture evidence** — message, customer footprint, incident state.
+2. **Mapped semantic evidence** — bounded model or deterministic parser output.
+3. **Deterministic policy** — `ALLOW / HOLD / UNKNOWN / REVIEW`.
+4. **Human action** — the operator chooses whether to execute the permitted action.
+5. **Side effect** — actual or simulated outbound action plus verification result.
 
-Expected hero partition:
+The UI exposes this truth boundary explicitly.
 
-- ACME -> `HOLD` because ACME depends on EU Auth and EU Auth is degraded.
-- GLOBEX -> `ALLOW` because all relevant GLOBEX dependencies are healthy.
-- INITECH -> `UNKNOWN` because its required dependency mapping is missing.
-
-## Causal multi-app architecture
-
-PERTAIN uses three non-duplicative external app roles:
-
-1. **Gmail** — source of the outgoing message and intended recipients; controlled outbound side effect.
-2. **Salesforce** — customer-specific service footprint/dependency/region evidence.
-3. **Jira** — current service/component incident truth.
-
-Arga Labs twins are the preferred deterministic proof harness for these APIs when hackathon access is available. Twin/simulated evidence must remain labeled as such.
-
-## AI boundary
-
-AI is intentionally not the policy authority.
-
-The semantic layer is bounded to converting free-form outgoing language into a finite predicate vocabulary, for example:
-
-- `ALL_RELEVANT_SERVICES_HEALTHY`
-- `NO_RELEVANT_CUSTOMER_IMPACT`
-- `SCOPED_SERVICES_HEALTHY`
-
-Structured status, customer dependency membership, missingness, final recipient eligibility, send policy and side-effect verification are deterministic wherever possible.
-
-Malformed or materially ambiguous semantic output must fail closed to `REVIEW` / `UNKNOWN`; it must not become `ALLOW` from model confidence alone.
-
-## Truth classes
-
-### ALLOW
-All required evidence is present and the exact outgoing claim is supported for that customer.
+## 3. Fail-closed outcomes
 
 ### HOLD
-Required evidence is present and at least one relevant fact contradicts the outgoing claim.
+
+Use when required evidence is present and directly contradicts the outgoing statement.
+
+Example: ACME depends on `EU Auth`; `EU Auth = DEGRADED`; statement says `fully restored`.
 
 ### UNKNOWN
-Required authoritative evidence is missing, unavailable or unusable, so safety cannot be established.
+
+Use when required authoritative evidence is missing, unavailable or stale.
+
+Examples:
+
+- dependency map missing;
+- Jira state missing;
+- relevant state older than the configured freshness window.
 
 ### REVIEW
-Evidence exists but is materially contradictory, or the semantic mapping is too ambiguous for deterministic resolution.
 
-## Failure posture
+Use when semantic mapping is materially ambiguous or the bounded scope cannot be reconciled safely.
 
-PERTAIN is fail-closed by design:
+### ALLOW
 
-- missing customer footprint -> `UNKNOWN`;
-- missing service state -> `UNKNOWN`;
-- degraded/down relevant service -> `HOLD`;
-- ambiguous claim -> `REVIEW`;
-- provider read failure -> no permitted send derived from that missing evidence;
-- provider write failure -> never report `VERIFIED SENT`;
-- duplicate recipients -> dedupe before execution;
-- `HOLD`, `UNKNOWN` and `REVIEW` recipients -> zero permitted outbound side effects.
+Use only when all required relevant evidence exists, is fresh enough, and supports the exact statement.
 
-## Side-effect proof
+## 4. Concurrent evidence workers
 
-The side-effect contract is stricter than `API returned 200`:
+After loading the outbound message, PERTAIN runs three independent evidence jobs concurrently:
 
-- only `ALLOW` recipients are passed to the Gmail send adapter;
-- the resulting provider message ID is re-read when supported;
-- send is marked `VERIFIED` only when the follow-up provider read succeeds;
-- non-ALLOW recipients remain explicitly `NOT SENT` in the same receipt.
+- `CLAIM`
+- `CUSTOMER`
+- `INCIDENT`
 
-## Evaluation strategy
+Each worker emits an inspectable trace:
 
-The minimum reliability matrix contains 15 bounded cases across positive, negative and ambiguity/missing-evidence behavior. It includes:
+- source;
+- status;
+- duration;
+- bounded summary.
 
-- the three-customer hero split;
-- missing dependency mapping;
-- missing incident truth;
-- degraded/down service;
-- unknown service state;
-- scoped claim excluding an unrelated degraded service;
-- scoped claim including a degraded service;
-- service-name normalization;
-- ambiguous language;
-- malformed/unsupported semantic mapping behavior;
-- no silent safety on absent evidence.
+Worker failures are isolated. They cannot silently become `ALLOW`.
 
-Integration evaluation additionally requires:
+Important claim boundary:
 
-- actual/twin reads from Gmail, Salesforce and Jira;
-- one permitted outbound side effect;
-- zero forbidden sends;
-- provider write failure not becoming false success.
+> Concurrency is an implementation advantage for latency and independent failure isolation. PERTAIN does not currently claim that concurrency is semantically necessary for correctness.
 
-## Evidence status
+## 5. Server-side send integrity
 
-### Proven in repository / CI
+The browser does not authorize the final recipient list.
 
-- deterministic `ALLOW / HOLD / UNKNOWN / REVIEW` policy exists;
-- bounded semantic parser exists;
-- provider adapters exist for Gmail, Salesforce and Jira;
-- controlled send path permits only `ALLOW` recipients;
-- side-effect verification path exists;
-- proof-first evaluator UI exists;
-- automated tests and production build are executed in GitHub Actions.
+When the operator triggers the side effect, `/api/send` performs a fresh server-side evaluation and derives the send plan from server-generated policy state.
 
-### Still required before submission lock
+This prevents a modified browser payload from adding a forbidden recipient to the send set.
 
-- exercise the selected external app environment (preferably Arga twins) end to end;
-- preserve evidence/receipts of the three external reads;
-- verify one allowed Gmail side effect and zero forbidden side effects;
-- deploy a public evaluator URL;
-- run the final 15-case suite against the submission candidate;
-- Project Finisher claim/evidence reconciliation.
+## 6. Freshness guard
 
-## Claim boundary
+Incident service evidence may include `updatedAt`.
 
-PERTAIN does **not** claim:
+If a relevant service record is older than `PERTAIN_EVIDENCE_MAX_AGE_MINUTES` (default 30), the customer fails closed to `UNKNOWN`.
 
-- production customers;
-- production-grade security/reliability;
-- measured churn or revenue reduction;
-- universal incident-platform compatibility;
-- comprehensive SLA interpretation;
-- legal/compliance correctness.
+A stale green status is therefore not accepted as proof of safe communication.
 
-It claims only the behavior demonstrated by the hackathon build and its captured evaluation evidence.
+## 7. Side-effect proof
+
+Every send result records:
+
+- recipient;
+- attempted;
+- verified;
+- proof mode;
+- provider message ID when available;
+- provider error when available.
+
+`SIMULATED_FIXTURE` is clearly labeled and is not presented as external proof.
+
+`EXTERNAL` send results are only reported verified when the provider read-back succeeds.
+
+## 8. Reliability suite — 20 bounded controls
+
+The current suite covers:
+
+1. degraded relevant dependency -> `HOLD`
+2. all relevant dependencies healthy -> `ALLOW`
+3. missing customer dependency map -> `UNKNOWN`
+4. missing incident state -> `UNKNOWN`
+5. ambiguous semantic mapping -> `REVIEW`
+6. `DOWN` dependency -> `HOLD`
+7. authoritative state `UNKNOWN` -> `UNKNOWN`
+8. scoped claim can exclude unrelated degraded dependency
+9. scoped degraded dependency -> `HOLD`
+10. service-name normalization
+11. empty customer service evidence -> `UNKNOWN`
+12. unsupported semantic scope must not silently `ALLOW`
+13. `fully restored` semantic mapping
+14. `no customer impact` semantic mapping
+15. vague wording -> ambiguous
+16. stale authoritative evidence -> `UNKNOWN`
+17. fresh healthy evidence -> `ALLOW`
+18. state change flips verdict from `HOLD` to `ALLOW`
+19. send plan includes only `ALLOW`
+20. duplicate intended recipients are deduped
+
+The suite deliberately includes negative and insufficient-evidence behavior, not only happy paths.
+
+## 9. Real negative event
+
+The project preserves a public first-person SaaS incident account reporting a 14-hour outage discovered through a customer tweet.
+
+Reported observable impact included:
+
+- three enterprise customers losing a day of synchronization;
+- one missed compliance deadline;
+- two reported churns representing a combined $28K ARR.
+
+Evidence class:
+
+`FIRST_PERSON_ANECDOTE__UNAUDITED`
+
+This is not treated as market-size proof. It is a real failure anchor that informs the design rule:
+
+> Do not assume one global incident statement is safe for every customer.
+
+## 10. Multi-app proof contract
+
+Before terminal readiness, PERTAIN must preserve evidence that:
+
+- the proposed communication comes from a real external app surface;
+- customer-specific truth comes from a distinct app surface;
+- incident/service truth comes from a distinct app surface;
+- the expected partition is produced from those external reads;
+- only `ALLOW` receives the permitted external side effect;
+- `HOLD / UNKNOWN / REVIEW` receive zero forbidden side effects;
+- the permitted side effect is externally verified.
+
+Seeded mode does not satisfy this final proof by itself.
+
+## 11. Known limitations
+
+- customer footprint quality is only as good as the authoritative source;
+- arbitrary natural-language SLA interpretation is out of scope;
+- semantic model evaluation remains bounded, not universal;
+- provider authentication hardening is hackathon-grade, not production-grade;
+- current public negative-event anchor is anecdotal;
+- external three-app proof is pending until configured credentials/test surfaces are exercised.
+
+## 12. Release strategy
+
+Primary: **Cloudflare Workers** using the OpenNext Cloudflare adapter.
+
+Fallback: Vercel only if Cloudflare release is blocked.
+
+Reason: protect a constrained Vercel daily build quota and keep final release independent of preview-build exhaustion.

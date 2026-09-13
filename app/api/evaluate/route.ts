@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { evaluateMessage } from "@/lib/orchestrator";
 
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+export async function POST(_request: NextRequest) {
   try {
     const receipt = await evaluateMessage();
     return NextResponse.json(receipt, { status: 200 });

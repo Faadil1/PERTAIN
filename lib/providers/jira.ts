@@ -55,7 +55,7 @@ function parseIssue(issue: any): IncidentServiceState | null {
 }
 
 export async function loadIncidentTruth(): Promise<IncidentTruth> {
-  if (isDemo()) return demoIncident;
+  if (isDemo()) return demoIncident();
 
   const cfg = config();
   const response = await jiraFetch(`/rest/api/3/search?jql=${encodeURIComponent(cfg.jql)}&maxResults=100`);

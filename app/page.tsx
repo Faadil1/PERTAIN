@@ -46,11 +46,7 @@ export default function HomePage() {
     setSending(true);
     setError(null);
     try {
-      const response = await fetch("/api/send", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(evaluation),
-      });
+      const response = await fetch("/api/send", { method: "POST" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || data.error || "Send failed");
       setSendReceipt(data);
@@ -68,6 +64,27 @@ export default function HomePage() {
     );
   }, [evaluation]);
 
+  const downloadReceipt = useCallback(() => {
+    if (!evaluation) return;
+    const payload = {
+      product: "PERTAIN",
+      exportedAt: new Date().toISOString(),
+      evaluation,
+      sendReceipt,
+      truthBoundaryNote:
+        evaluation.mode === "external"
+          ? "External provider evidence. Side-effect result is only external when proofMode=EXTERNAL."
+          : "Seeded fixture evaluation. Simulated side effects are not external proof.",
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const href = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = `pertain-receipt-${evaluation.runId}.json`;
+    anchor.click();
+    URL.revokeObjectURL(href);
+  }, [evaluation, sendReceipt]);
+
   return (
     <main className="shell">
       <header className="topbar">
@@ -75,7 +92,7 @@ export default function HomePage() {
           <div className="eyebrow">PER-CUSTOMER INCIDENT TRUTH GATE</div>
           <div className="brand-row">
             <h1>PERTAIN</h1>
-            <span className="build-tag">HACKATHON BUILD</span>
+            <span className="build-tag">DAY-OF-EVENT BUILD</span>
           </div>
         </div>
         <div className="top-meta">
@@ -96,9 +113,36 @@ export default function HomePage() {
           <p>
             {evaluation?.mode === "external"
               ? "Live provider reads are active."
-              : "Clearly labeled fixture mode. External proof is required before submission lock."}
+              : "Fixture mode is explicitly labeled. It is useful for repeatable evaluation, not final external proof."}
           </p>
         </div>
+      </section>
+
+      <section className="stakes-strip">
+        <span>WHY IT MATTERS</span>
+        <strong>SLA exposure</strong>
+        <strong>support escalation</strong>
+        <strong>customer trust</strong>
+        <strong>churn risk</strong>
+        <strong>operational rework</strong>
+      </section>
+
+      <section className="truth-boundary-grid">
+        <BoundaryCard
+          label="Evidence"
+          value={evaluation?.truthBoundary.evidence || "PENDING"}
+          detail={evaluation?.truthBoundary.evidence === "EXTERNAL" ? "provider reads" : "fixture state"}
+        />
+        <BoundaryCard
+          label="Semantic mapping"
+          value={evaluation?.truthBoundary.semanticMapping || "PENDING"}
+          detail="never owns final verdict"
+        />
+        <BoundaryCard
+          label="Side effect"
+          value={evaluation?.truthBoundary.sideEffects || "PENDING"}
+          detail="only ALLOW enters send plan"
+        />
       </section>
 
       <section className="dispatch-card">
@@ -123,7 +167,7 @@ export default function HomePage() {
       <section className="worker-section">
         <div className="section-heading">
           <span className="step-index">02 / CONCURRENT EVIDENCE WORKERS</span>
-          <p>Three independent evidence jobs run in parallel, then converge into deterministic policy.</p>
+          <p>Independent evidence jobs run in parallel, fail separately, then converge into deterministic policy.</p>
         </div>
 
         <div className="worker-grid">
@@ -131,7 +175,10 @@ export default function HomePage() {
             const worker = evaluation?.workers?.find((item) => item.id === fallback.id);
             const failed = worker?.status === "FAILED_CLOSED";
             return (
-              <article key={fallback.id} className={`worker-card ${failed ? "worker-failed" : worker ? "worker-ok" : "worker-pending"}`}>
+              <article
+                key={fallback.id}
+                className={`worker-card ${failed ? "worker-failed" : worker ? "worker-ok" : "worker-pending"}`}
+              >
                 <div className="worker-head">
                   <span className="worker-label">{fallback.label}</span>
                   <span className="worker-status">
@@ -156,7 +203,7 @@ export default function HomePage() {
       <section className="switchboard-section">
         <div className="section-heading">
           <span className="step-index">03 / CUSTOMER TRUTH ENVELOPES</span>
-          <p>Same statement. Evaluated separately against each customer&apos;s actual dependencies.</p>
+          <p>Same statement. Evaluated separately against each customer&apos;s real dependency envelope.</p>
         </div>
 
         <div className="branch-origin" aria-hidden="true">
@@ -168,11 +215,7 @@ export default function HomePage() {
         <div className="truth-grid">
           {orderedRecipients.length
             ? orderedRecipients.map((recipient) => (
-                <CustomerPort
-                  key={recipient.email}
-                  recipient={recipient}
-                  sendReceipt={sendReceipt}
-                />
+                <CustomerPort key={recipient.email} recipient={recipient} sendReceipt={sendReceipt} />
               ))
             : ["ACME", "GLOBEX", "INITECH"].map((name) => (
                 <div key={name} className="customer-port loading-port">
@@ -190,26 +233,93 @@ export default function HomePage() {
           <span className="step-index">04 / CONTROLLED SIDE EFFECT</span>
           <h3>Send only to the audience the evidence supports.</h3>
           <p>
+            Browser state cannot authorize a send. The server re-evaluates policy before execution.
+          </p>
+          <p className="allowed-set">
             Allowed set: <strong>{evaluation?.allowedEmails.join(", ") || "—"}</strong>
           </p>
         </div>
-        <button
-          className="primary-button"
-          disabled={!evaluation || sending || evaluation.allowedEmails.length === 0}
-          onClick={() => void sendAllowed()}
+        <div className="action-stack">
+          <button
+            className="primary-button"
+            disabled={!evaluation || sending || evaluation.allowedEmails.length === 0}
+            onClick={() => void sendAllowed()}
+          >
+            {sending ? "Revalidating + sending…" : "Send to allowed audience"}
+          </button>
+          <button className="receipt-button" disabled={!evaluation} onClick={downloadReceipt}>
+            Download evidence receipt
+          </button>
+        </div>
+      </section>
+
+      <section className="assurance-grid">
+        <AssuranceCard
+          metric="20"
+          label="bounded controls"
+          detail="positive, negative, stale, ambiguity, state-change and send-policy cases"
+        />
+        <AssuranceCard
+          metric="FAIL CLOSED"
+          label="missing evidence"
+          detail="UNKNOWN or REVIEW — never manufactured ALLOW"
+        />
+        <AssuranceCard
+          metric="0"
+          label="forbidden recipients planned"
+          detail="HOLD / UNKNOWN / REVIEW never enter the send plan"
+        />
+      </section>
+
+      <section className="failure-anchor">
+        <div>
+          <span className="step-index">REAL FAILURE ANCHOR</span>
+          <h3>Real failure &gt; fake success.</h3>
+        </div>
+        <p>
+          PERTAIN is grounded by a public first-person SaaS incident account reporting a 14-hour outage
+          discovered through a customer tweet, with reported enterprise synchronization loss, a missed
+          compliance deadline and subsequent churn. It is an <strong>unaudited anecdote</strong>, not
+          market-size proof.
+        </p>
+        <a
+          href="https://www.reddit.com/r/SaaS/comments/1s6p2xc/server_went_down_for_14_hours_on_a_tuesday_we/"
+          target="_blank"
+          rel="noreferrer"
         >
-          {sending ? "Verifying send…" : "Send to allowed audience"}
-        </button>
+          Inspect source ↗
+        </a>
       </section>
 
       <footer className="proof-footer">
         <div>
           <span className="proof-dot" />
-          <strong>Observed evidence</strong> stays separate from model mapping, policy, human action and side effects.
+          <strong>Observed evidence</strong> stays separate from model mapping, deterministic policy,
+          human action and side effects.
         </div>
         <div className="run-id">{evaluation?.runId || "run pending"}</div>
       </footer>
     </main>
+  );
+}
+
+function BoundaryCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <article className="boundary-card">
+      <span>{label}</span>
+      <strong>{value.replaceAll("_", " ")}</strong>
+      <small>{detail}</small>
+    </article>
+  );
+}
+
+function AssuranceCard({ metric, label, detail }: { metric: string; label: string; detail: string }) {
+  return (
+    <article className="assurance-card">
+      <strong>{metric}</strong>
+      <span>{label}</span>
+      <p>{detail}</p>
+    </article>
   );
 }
 
@@ -232,6 +342,14 @@ function CustomerPort({
         </div>
         <span className={verdictClass(recipient.verdict)}>{recipient.verdict}</span>
       </div>
+
+      {recipient.obligations?.length ? (
+        <div className="obligation-row">
+          {recipient.obligations.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </div>
+      ) : null}
 
       <p className="reason">{recipient.reason}</p>
 
@@ -262,7 +380,11 @@ function CustomerPort({
         <span>SIDE EFFECT</span>
         {sent ? (
           <strong className={sent.verified ? "side-verified" : "side-failed"}>
-            {sent.verified ? "VERIFIED SENT" : "FAILED"}
+            {sent.proofMode === "SIMULATED_FIXTURE"
+              ? "SIMULATED SEND"
+              : sent.verified
+                ? "VERIFIED SENT"
+                : "FAILED"}
           </strong>
         ) : notSent ? (
           <strong className="side-none">NOT SENT</strong>

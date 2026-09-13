@@ -1,17 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
-import { executeAllowedSend } from "@/lib/orchestrator";
-import type { EvaluationReceipt } from "@/lib/types";
+import { NextResponse } from "next/server";
+import { evaluateMessage, executeAllowedSend } from "@/lib/orchestrator";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const receipt = (await request.json()) as EvaluationReceipt;
-    if (!receipt?.runId || !receipt?.draft || !Array.isArray(receipt?.recipients)) {
-      return NextResponse.json({ error: "Invalid evaluation receipt." }, { status: 400 });
-    }
-
-    const sendReceipt = await executeAllowedSend(receipt);
+    // Never trust a browser-provided allow-list. Re-evaluate server-side immediately
+    // before planning the bounded side effect.
+    const freshReceipt = await evaluateMessage();
+    const sendReceipt = await executeAllowedSend(freshReceipt);
     return NextResponse.json(sendReceipt, { status: 200 });
   } catch (error) {
     return NextResponse.json(
