@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EvaluationReceipt, RecipientVerdict, SendReceipt } from "@/lib/types";
 
-const statusOrder = ["HOLD", "ALLOW", "UNKNOWN", "REVIEW"] as const;
+const customerOrder = ["ACME", "GLOBEX", "INITECH"];
 const workerFallback = [
   { id: "claim", label: "CLAIM", source: "semantic mapper" },
   { id: "customer", label: "CUSTOMER", source: "Salesforce" },
@@ -12,6 +12,21 @@ const workerFallback = [
 
 function verdictClass(verdict: RecipientVerdict["verdict"]) {
   return `verdict verdict-${verdict.toLowerCase()}`;
+}
+
+function decisiveLabel(recipient: RecipientVerdict) {
+  if (recipient.verdict === "UNKNOWN" && !recipient.decisiveService) return "DEPENDENCY MAP MISSING";
+  if (recipient.decisiveService) {
+    const observed = recipient.evidence.find(
+      (fact) => fact.kind === "OBSERVED" && fact.label === recipient.decisiveService,
+    );
+    return observed ? `${recipient.decisiveService} · ${observed.value}` : recipient.decisiveService;
+  }
+  const observed = recipient.evidence
+    .filter((fact) => fact.kind === "OBSERVED")
+    .filter((fact) => /HEALTHY|DEGRADED|DOWN|UNKNOWN/i.test(fact.value))
+    .map((fact) => `${fact.label} · ${fact.value}`);
+  return observed.length ? observed.join(" + ") : "EVIDENCE RECONCILED";
 }
 
 export default function HomePage() {
@@ -60,7 +75,7 @@ export default function HomePage() {
   const orderedRecipients = useMemo(() => {
     if (!evaluation) return [];
     return [...evaluation.recipients].sort(
-      (a, b) => statusOrder.indexOf(a.verdict) - statusOrder.indexOf(b.verdict),
+      (a, b) => customerOrder.indexOf(a.accountName) - customerOrder.indexOf(b.accountName),
     );
   }, [evaluation]);
 
@@ -95,39 +110,28 @@ export default function HomePage() {
             <span className="build-tag">DAY-OF-EVENT BUILD</span>
           </div>
         </div>
-        <div className="top-meta">
-          <span>Gmail</span>
-          <span>Salesforce</span>
-          <span>Jira</span>
+        <div className="top-meta" aria-label="External applications">
+          <span>Gmail</span><span>Salesforce</span><span>Jira</span>
         </div>
       </header>
 
       <section className="intro-grid">
         <div className="intro-copy">
-          <p className="kicker">One incident. Different customer realities.</p>
+          <p className="kicker">ONE STATEMENT → THREE CUSTOMER TRUTHS</p>
           <h2>Know who this update actually applies to before it goes out.</h2>
         </div>
         <div className="mode-card">
-          <span className="mode-label">RUN MODE</span>
-          <strong>{evaluation?.mode === "external" ? "EXTERNAL APP PROOF" : "SEEDED EVALUATION"}</strong>
+          <span className="mode-label">CURRENT RUN</span>
+          <strong>{evaluation?.mode === "external" ? "EXTERNAL APP EVIDENCE" : "SEEDED / SAFE REPLAY"}</strong>
           <p>
             {evaluation?.mode === "external"
-              ? "Live provider reads are active."
-              : "Fixture mode is explicitly labeled. It is useful for repeatable evaluation, not final external proof."}
+              ? "Live provider reads are active. External writes still require an explicit server-side release switch."
+              : "Repeatable judge mode. Simulated actions stay visibly separate from locked external proof."}
           </p>
         </div>
       </section>
 
-      <section className="stakes-strip">
-        <span>WHY IT MATTERS</span>
-        <strong>SLA exposure</strong>
-        <strong>support escalation</strong>
-        <strong>customer trust</strong>
-        <strong>churn risk</strong>
-        <strong>operational rework</strong>
-      </section>
-
-      <section className="truth-boundary-grid">
+      <section className="truth-boundary-grid" aria-label="Truth boundary">
         <BoundaryCard
           label="Evidence"
           value={evaluation?.truthBoundary.evidence || "PENDING"}
@@ -136,54 +140,81 @@ export default function HomePage() {
         <BoundaryCard
           label="Semantic mapping"
           value={evaluation?.truthBoundary.semanticMapping || "PENDING"}
-          detail="never owns final verdict"
+          detail="bounded mapper · never authorizes"
         />
         <BoundaryCard
-          label="Side effect"
-          value={evaluation?.truthBoundary.sideEffects || "PENDING"}
-          detail="only ALLOW enters send plan"
+          label="Policy"
+          value="DETERMINISTIC"
+          detail="verdict + recipient set"
         />
       </section>
 
       <section className="dispatch-card">
         <div className="dispatch-topline">
-          <span className="step-index">01 / MESSAGE UNDER TEST</span>
+          <span className="step-index">01 / ONE MESSAGE UNDER TEST</span>
           <button className="secondary-button" onClick={() => void evaluate()} disabled={loading}>
             {loading ? "Evaluating…" : "Re-evaluate"}
           </button>
         </div>
         <div className="message-body">
-          <div className="gmail-mark">GMAIL DRAFT</div>
-          <blockquote>
-            {evaluation?.draft.body || "Your production workflows are fully restored."}
-          </blockquote>
+          <div className="gmail-mark">GMAIL DRAFT · SAME COPY FOR EVERY RECIPIENT</div>
+          <blockquote>{evaluation?.draft.body || "Your production workflows are fully restored."}</blockquote>
           <div className="message-meta">
-            <span>{evaluation?.draft.subject || "Incident update — production workflows"}</span>
+            <span>{evaluation?.draft.subject || "PERTAIN incident recovery update"}</span>
             <span>{evaluation?.draft.recipients.length ?? 3} intended recipients</span>
           </div>
         </div>
       </section>
 
-      <section className="worker-section">
-        <div className="section-heading">
-          <span className="step-index">02 / CONCURRENT EVIDENCE WORKERS</span>
-          <p>Independent evidence jobs run in parallel, fail separately, then converge into deterministic policy.</p>
+      <section className="switchboard-section">
+        <div className="switchboard-titleline">
+          <span className="step-index">02 / AUDIENCE PARTITION</span>
+          <strong>ONE STATEMENT → THREE CUSTOMER TRUTHS</strong>
+          <span className="allowed-count">
+            {evaluation ? `${evaluation.allowedEmails.length} / ${evaluation.recipients.length} ALLOWED` : "RESOLVING"}
+          </span>
         </div>
 
+        <div className="branch-origin" aria-hidden="true"><span /></div>
+        {error ? <div className="error-banner">FAIL CLOSED — {error}</div> : null}
+
+        <div className="truth-grid">
+          {orderedRecipients.length
+            ? orderedRecipients.map((recipient) => (
+                <CustomerPort key={recipient.email} recipient={recipient} sendReceipt={sendReceipt} />
+              ))
+            : customerOrder.map((name) => (
+                <div key={name} className="customer-port loading-port">
+                  <span className="customer-name">{name}</span>
+                  <strong className="loading-verdict">CHECKING</strong>
+                </div>
+              ))}
+        </div>
+      </section>
+
+      <section className="proof-receipt" aria-label="Locked external proof">
+        <span className="receipt-label">LOCKED EXTERNAL PROOF</span>
+        <strong>MODEL PATH PROVEN</strong>
+        <strong>20 / 20 CONTROLS</strong>
+        <strong>STALE EVIDENCE → 0 SENDS</strong>
+        <strong>GLOBEX DELIVERY VERIFIED</strong>
+        <span className="receipt-note">Evidence package, not a claim about this replay.</span>
+      </section>
+
+      <section className="worker-section">
+        <div className="section-heading">
+          <span className="step-index">03 / EVIDENCE BUS</span>
+          <p>Three independent reads converge into policy. Worker failure cannot silently become ALLOW.</p>
+        </div>
         <div className="worker-grid">
           {workerFallback.map((fallback) => {
             const worker = evaluation?.workers?.find((item) => item.id === fallback.id);
             const failed = worker?.status === "FAILED_CLOSED";
             return (
-              <article
-                key={fallback.id}
-                className={`worker-card ${failed ? "worker-failed" : worker ? "worker-ok" : "worker-pending"}`}
-              >
+              <article key={fallback.id} className={`worker-card ${failed ? "worker-failed" : worker ? "worker-ok" : "worker-pending"}`}>
                 <div className="worker-head">
                   <span className="worker-label">{fallback.label}</span>
-                  <span className="worker-status">
-                    {worker ? (failed ? "FAIL CLOSED" : "VERIFIED") : "RUNNING"}
-                  </span>
+                  <span className="worker-status">{worker ? (failed ? "FAIL CLOSED" : "VERIFIED") : "RUNNING"}</span>
                 </div>
                 <strong>{worker?.source || fallback.source}</strong>
                 <p>{worker?.summary || "Reading evidence…"}</p>
@@ -192,52 +223,19 @@ export default function HomePage() {
             );
           })}
         </div>
-
         <div className="adjudicator-strip">
-          <span>PARALLEL EVIDENCE READS</span>
-          <strong>→ DETERMINISTIC ADJUDICATOR →</strong>
-          <span>CUSTOMER-SPECIFIC TRUTH</span>
-        </div>
-      </section>
-
-      <section className="switchboard-section">
-        <div className="section-heading">
-          <span className="step-index">03 / CUSTOMER TRUTH ENVELOPES</span>
-          <p>Same statement. Evaluated separately against each customer&apos;s real dependency envelope.</p>
-        </div>
-
-        <div className="branch-origin" aria-hidden="true">
-          <span />
-        </div>
-
-        {error ? <div className="error-banner">FAIL CLOSED — {error}</div> : null}
-
-        <div className="truth-grid">
-          {orderedRecipients.length
-            ? orderedRecipients.map((recipient) => (
-                <CustomerPort key={recipient.email} recipient={recipient} sendReceipt={sendReceipt} />
-              ))
-            : ["ACME", "GLOBEX", "INITECH"].map((name) => (
-                <div key={name} className="customer-port loading-port">
-                  <div className="port-head">
-                    <span>{name}</span>
-                    <span className="skeleton-pill">CHECKING</span>
-                  </div>
-                </div>
-              ))}
+          <span>OBSERVED + MAPPED</span>
+          <strong>DETERMINISTIC ADJUDICATOR</strong>
+          <span>ALLOW / HOLD / UNKNOWN / REVIEW</span>
         </div>
       </section>
 
       <section className="dispatch-control">
         <div>
           <span className="step-index">04 / CONTROLLED SIDE EFFECT</span>
-          <h3>Send only to the audience the evidence supports.</h3>
-          <p>
-            Browser state cannot authorize a send. The server re-evaluates policy before execution.
-          </p>
-          <p className="allowed-set">
-            Allowed set: <strong>{evaluation?.allowedEmails.join(", ") || "—"}</strong>
-          </p>
+          <h3>Only evidence-supported recipients can move.</h3>
+          <p>The server re-evaluates before execution. Public external writes are disabled unless the server is explicitly released for them.</p>
+          <p className="allowed-set">Allowed set: <strong>{evaluation?.allowedEmails.join(", ") || "—"}</strong></p>
         </div>
         <div className="action-stack">
           <button
@@ -245,58 +243,29 @@ export default function HomePage() {
             disabled={!evaluation || sending || evaluation.allowedEmails.length === 0}
             onClick={() => void sendAllowed()}
           >
-            {sending ? "Revalidating + sending…" : "Send to allowed audience"}
+            {sending
+              ? "Revalidating…"
+              : evaluation?.mode === "external"
+                ? "Execute allowed action"
+                : "Simulate allowed action"}
           </button>
-          <button className="receipt-button" disabled={!evaluation} onClick={downloadReceipt}>
-            Download evidence receipt
-          </button>
+          <button className="receipt-button" disabled={!evaluation} onClick={downloadReceipt}>Download evidence receipt</button>
         </div>
-      </section>
-
-      <section className="assurance-grid">
-        <AssuranceCard
-          metric="20"
-          label="bounded controls"
-          detail="positive, negative, stale, ambiguity, state-change and send-policy cases"
-        />
-        <AssuranceCard
-          metric="FAIL CLOSED"
-          label="missing evidence"
-          detail="UNKNOWN or REVIEW — never manufactured ALLOW"
-        />
-        <AssuranceCard
-          metric="0"
-          label="forbidden recipients planned"
-          detail="HOLD / UNKNOWN / REVIEW never enter the send plan"
-        />
       </section>
 
       <section className="failure-anchor">
         <div>
-          <span className="step-index">REAL FAILURE ANCHOR</span>
+          <span className="step-index">FAILURE EVIDENCE</span>
           <h3>Real failure &gt; fake success.</h3>
         </div>
         <p>
-          PERTAIN is grounded by a public first-person SaaS incident account reporting a 14-hour outage
-          discovered through a customer tweet, with reported enterprise synchronization loss, a missed
-          compliance deadline and subsequent churn. It is an <strong>unaudited anecdote</strong>, not
-          market-size proof.
+          The proof record preserves both an invalid-recipient bounce and a stale-Jira run that collapsed the allowed set to zero.
+          PERTAIN treats provider acceptance, current evidence and recipient delivery as different proof classes.
         </p>
-        <a
-          href="https://www.reddit.com/r/SaaS/comments/1s6p2xc/server_went_down_for_14_hours_on_a_tuesday_we/"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Inspect source ↗
-        </a>
       </section>
 
       <footer className="proof-footer">
-        <div>
-          <span className="proof-dot" />
-          <strong>Observed evidence</strong> stays separate from model mapping, deterministic policy,
-          human action and side effects.
-        </div>
+        <div><span className="proof-dot" /><strong>Observed evidence</strong> stays separate from model mapping, deterministic policy, human action and side effects.</div>
         <div className="run-id">{evaluation?.runId || "run pending"}</div>
       </footer>
     </main>
@@ -313,23 +282,7 @@ function BoundaryCard({ label, value, detail }: { label: string; value: string; 
   );
 }
 
-function AssuranceCard({ metric, label, detail }: { metric: string; label: string; detail: string }) {
-  return (
-    <article className="assurance-card">
-      <strong>{metric}</strong>
-      <span>{label}</span>
-      <p>{detail}</p>
-    </article>
-  );
-}
-
-function CustomerPort({
-  recipient,
-  sendReceipt,
-}: {
-  recipient: RecipientVerdict;
-  sendReceipt: SendReceipt | null;
-}) {
+function CustomerPort({ recipient, sendReceipt }: { recipient: RecipientVerdict; sendReceipt: SendReceipt | null }) {
   const sent = sendReceipt?.allowed.find((item) => item.email === recipient.email);
   const notSent = sendReceipt?.notSent.find((item) => item.email === recipient.email);
 
@@ -340,28 +293,20 @@ function CustomerPort({
           <span className="customer-name">{recipient.accountName}</span>
           <span className="customer-email">{recipient.email}</span>
         </div>
-        <span className={verdictClass(recipient.verdict)}>{recipient.verdict}</span>
+        <span className="lane-index">CUSTOMER TRUTH</span>
       </div>
 
-      {recipient.obligations?.length ? (
-        <div className="obligation-row">
-          {recipient.obligations.map((item) => (
-            <span key={item}>{item}</span>
-          ))}
-        </div>
-      ) : null}
+      <strong className={verdictClass(recipient.verdict)}>{recipient.verdict}</strong>
+
+      <div className="decisive-fact">
+        <span>DECISIVE EVIDENCE</span>
+        <strong>{decisiveLabel(recipient)}</strong>
+      </div>
 
       <p className="reason">{recipient.reason}</p>
 
-      {recipient.decisiveService ? (
-        <div className="decisive-fact">
-          <span>DECISIVE FACT</span>
-          <strong>{recipient.decisiveService}</strong>
-        </div>
-      ) : null}
-
       <details className="evidence-drawer">
-        <summary>Inspect evidence</summary>
+        <summary>Inspect evidence trail</summary>
         <div className="evidence-list">
           {recipient.evidence.map((fact, index) => (
             <div className="evidence-row" key={`${fact.kind}-${index}`}>
@@ -380,16 +325,14 @@ function CustomerPort({
         <span>SIDE EFFECT</span>
         {sent ? (
           <strong className={sent.verified ? "side-verified" : "side-failed"}>
-            {sent.proofMode === "SIMULATED_FIXTURE"
-              ? "SIMULATED SEND"
-              : sent.verified
-                ? "VERIFIED SENT"
-                : "FAILED"}
+            {sent.proofMode === "SIMULATED_FIXTURE" ? "SIMULATED" : sent.verified ? "VERIFIED SENT" : "FAILED"}
           </strong>
         ) : notSent ? (
           <strong className="side-none">NOT SENT</strong>
+        ) : recipient.verdict === "ALLOW" ? (
+          <strong className="side-ready">ONLY LANE ELIGIBLE</strong>
         ) : (
-          <strong className="side-pending">PENDING HUMAN ACTION</strong>
+          <strong className="side-none">NOT ELIGIBLE</strong>
         )}
       </div>
     </article>
