@@ -7,8 +7,16 @@ function config() {
   return {
     baseUrl: (process.env.JIRA_BASE_URL || "").replace(/\/$/, ""),
     token: process.env.JIRA_API_TOKEN || "",
+    email: process.env.JIRA_EMAIL || "",
     jql: process.env.JIRA_JQL || "labels = pertain",
   };
+}
+
+function authorizationHeader(email: string, token: string) {
+  if (email) {
+    return `Basic ${Buffer.from(`${email}:${token}`).toString("base64")}`;
+  }
+  return `Bearer ${token}`;
 }
 
 async function jiraFetch(path: string) {
@@ -16,7 +24,7 @@ async function jiraFetch(path: string) {
   if (!cfg.baseUrl || !cfg.token) throw new Error("Jira environment is not configured");
   return fetch(`${cfg.baseUrl}${path}`, {
     headers: {
-      authorization: `Bearer ${cfg.token}`,
+      authorization: authorizationHeader(cfg.email, cfg.token),
       accept: "application/json",
     },
     cache: "no-store",
@@ -58,7 +66,10 @@ export async function loadIncidentTruth(): Promise<IncidentTruth> {
   if (isDemo()) return demoIncident();
 
   const cfg = config();
-  const response = await jiraFetch(`/rest/api/3/search?jql=${encodeURIComponent(cfg.jql)}&maxResults=100`);
+  const fields = ["summary", "status", "labels", "updated"].join(",");
+  const response = await jiraFetch(
+    `/rest/api/3/search/jql?jql=${encodeURIComponent(cfg.jql)}&maxResults=100&fields=${encodeURIComponent(fields)}`,
+  );
   if (!response.ok) throw new Error(`Jira search failed: ${response.status}`);
   const data = (await response.json()) as any;
   const services = (data.issues || []).map(parseIssue).filter(Boolean) as IncidentServiceState[];
