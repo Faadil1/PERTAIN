@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 Build: Multi-App AI Agent Hackathon
-Status: `VERIFICATION_EXTERNAL_PROOF_PASS__EVALUATION_LOCK_PENDING`
+Status: `EVALUATION_PASS__FINAL_CHANGED_HEAD_VERIFICATION_PENDING`
 
 ## 1. Product invariant
 
@@ -25,59 +25,39 @@ The UI exposes this truth boundary explicitly.
 ## 3. Fail-closed outcomes
 
 ### HOLD
-
 Use when required evidence is present and directly contradicts the outgoing statement.
 
 Example: ACME depends on `EU Auth`; `EU Auth = DEGRADED`; statement says `fully restored`.
 
 ### UNKNOWN
-
 Use when required authoritative evidence is missing, unavailable or stale.
 
-Examples:
-
-- dependency map missing;
-- Jira state missing;
-- relevant state older than the configured freshness window.
-
 ### REVIEW
-
 Use when semantic mapping is materially ambiguous or the bounded scope cannot be reconciled safely.
 
 ### ALLOW
-
 Use only when all required relevant evidence exists, is fresh enough, and supports the exact statement.
 
 ## 4. Concurrent evidence workers
 
 After loading the outbound message, PERTAIN runs three independent evidence jobs concurrently:
-
 - `CLAIM`
 - `CUSTOMER`
 - `INCIDENT`
 
-Each worker emits an inspectable trace:
+Each emits source, status, duration and bounded summary. Worker failures are isolated and cannot silently become `ALLOW`.
 
-- source;
-- status;
-- duration;
-- bounded summary.
-
-Worker failures are isolated. They cannot silently become `ALLOW`.
-
-Important claim boundary:
-
-> Concurrency is an implementation advantage for latency and independent failure isolation. PERTAIN does not currently claim that concurrency is semantically necessary for correctness.
+Concurrency is an implementation advantage for latency / failure isolation; PERTAIN does not claim it is semantically necessary for correctness.
 
 ## 5. Server-side send integrity
 
 The browser does not authorize the final recipient list.
 
-When the operator triggers the side effect, `/api/send` performs a fresh server-side evaluation and derives the send plan from server-generated policy state.
+`/api/send` performs a fresh server-side evaluation immediately before execution and derives the send plan from server-generated policy state.
 
-This prevents a modified browser payload from adding a forbidden recipient to the send set.
+The final external proof additionally reproduced the exact `HOLD / ALLOW / UNKNOWN` partition immediately before the side effect.
 
-The external guarded-send proof additionally reproduced the exact recipient identities and `HOLD / ALLOW / UNKNOWN` partition immediately before the side effect.
+For public safety, external Gmail writes are now disabled by default. An external runtime must explicitly set `PERTAIN_EXTERNAL_SEND_ENABLED=1` on the server before `/api/send` may call the real provider. Seeded demo mode remains clearly simulated.
 
 ## 6. Freshness guard
 
@@ -85,39 +65,40 @@ Incident service evidence may include `updatedAt`.
 
 If a relevant service record is older than `PERTAIN_EVIDENCE_MAX_AGE_MINUTES` (default 30), the customer fails closed to `UNKNOWN`.
 
-A stale green status is therefore not accepted as proof of safe communication.
+External run `pertain-1789335872938-1bihxx` demonstrated this: stale Jira evidence caused all three recipients to become `UNKNOWN`, `allowedRecipients=[]`, and no send occurred.
 
-This behavior was demonstrated externally in run `pertain-1789335872938-1bihxx`: stale Jira evidence caused all three recipients to become `UNKNOWN`, `allowedRecipients=[]`, and no send occurred.
+## 7. Model boundary
 
-## 7. Side-effect proof
+A real OpenAI-compatible model path was exercised in external read-only run `pertain-1789337300634-uyu47z` with:
+- `evidence=EXTERNAL`
+- `semanticMapping=MODEL`
+- ACME=`HOLD`
+- GLOBEX=`ALLOW`
+- INITECH=`UNKNOWN`
+- no new send.
 
-Every send result records:
+A direct model probe also exposed a useful failure mode: generic wording could be narrowed into an invented service scope. PERTAIN now canonicalizes only explicit global recovery phrases before deterministic policy. This does not make the model authoritative; it narrows the semantic contract and preserves fail-closed policy ownership.
 
-- recipient;
-- attempted;
-- verified;
-- proof mode;
-- provider message ID when available;
-- provider error when available.
+## 8. Side-effect proof
+
+Every send result records recipient, attempted, verified, proof mode, provider message ID when available, and provider error when available.
 
 `SIMULATED_FIXTURE` is clearly labeled and is not presented as external proof.
 
-`EXTERNAL` send results are only reported verified when the provider read-back succeeds.
-
 The final controlled external proof used:
-
 - fresh pre-send policy run: `pertain-1789336205624-k44jkw`;
 - send run: `pertain-1789336206618-68gnuf`;
-- sole authorized recipient: `bfaadil+globex@gmail.com`;
-- Gmail provider message ID: `1a09cbf93cdb9997`;
+- sole authorized identity: tagged GLOBEX;
 - provider result: `attempted=true`, `verified=true`, `proofMode=EXTERNAL`;
 - ACME remained `HOLD` and INITECH remained `UNKNOWN` in `notSent`.
 
-Recipient-side verification in the controlled Gmail mailbox found the exact provider message in `INBOX` addressed to `bfaadil+globex@gmail.com`, with subject `PERTAIN incident recovery update` and body `Your production workflows are fully restored.`. Matching `INBOX` searches for tagged ACME and INITECH returned no messages.
+Recipient-side verification in the controlled mailbox found the exact provider message in `INBOX` for tagged GLOBEX. Matching searches for tagged ACME and INITECH returned no messages.
 
-## 8. Reliability suite — 20 bounded controls
+The exact controlled mailbox aliases are intentionally omitted from the public repository because they are not needed to understand or reproduce the policy design.
 
-The current suite covers:
+## 9. Reliability suite — 20 bounded controls
+
+The locked Verification baseline covered:
 
 1. degraded relevant dependency -> `HOLD`
 2. all relevant dependencies healthy -> `ALLOW`
@@ -140,78 +121,68 @@ The current suite covers:
 19. send plan includes only `ALLOW`
 20. duplicate intended recipients are deduped
 
-GitHub Actions run `34778658716` on head `322016ed95e5fdb8f6649083d7bf7135260e3af1` executed the suite with:
-
+Locked Verification baseline:
 - tests: `20`
 - pass: `20`
 - fail: `0`
 - skipped: `0`
+- `npm run build`: PASS
+- `npm run build:cloudflare`: PASS
 
-The same run also passed `npm run build` and `npm run build:cloudflare`.
+The final TRACE / Winning Intelligence pass changed product code after that lock, so the current head must rerun these checks before public deployment. No prior green result is silently transferred to a changed head.
 
-## 9. Real negative event
+## 10. Real negative event
 
-The project preserves a public first-person SaaS incident account reporting a 14-hour outage discovered through a customer tweet.
+The project preserves a public first-person SaaS incident account reporting a 14-hour outage discovered through a customer tweet, with reported synchronization loss, a missed compliance deadline and subsequent churn.
 
-Reported observable impact included:
+Evidence class: `FIRST_PERSON_ANECDOTE__UNAUDITED`.
 
-- three enterprise customers losing a day of synchronization;
-- one missed compliance deadline;
-- two reported churns representing a combined $28K ARR.
-
-Evidence class:
-
-`FIRST_PERSON_ANECDOTE__UNAUDITED`
-
-This is not treated as market-size proof. It is a real failure anchor that informs the design rule:
+This is not market-size proof. It informs one design rule:
 
 > Do not assume one global incident statement is safe for every customer.
 
-## 10. Multi-app proof contract — satisfied under controlled external fixture
+## 11. Multi-app proof contract
 
-PERTAIN now preserves evidence that:
-
+PERTAIN preserves evidence that:
 - the proposed communication comes from Gmail;
 - customer-specific truth comes from Salesforce;
 - incident/service truth comes from Jira;
+- a real model path can map the language in the external runtime;
 - a fresh combined runtime produces `ACME=HOLD / GLOBEX=ALLOW / INITECH=UNKNOWN`;
-- only tagged GLOBEX receives the permitted external side effect;
-- tagged ACME and INITECH receive zero matching controlled-inbox deliveries;
-- the permitted Gmail side effect is provider-verified and recipient-visible in the controlled mailbox.
+- only tagged GLOBEX received the permitted external side effect;
+- tagged ACME and INITECH had zero matching controlled deliveries;
+- the permitted Gmail side effect was provider-verified and recipient-visible in the controlled mailbox.
 
-Controlled fixture identities:
+The three test identities intentionally routed to one controlled mailbox. This is a controlled integration proof, not production customer-domain deliverability.
 
-- ACME -> `bfaadil+acme@gmail.com`
-- GLOBEX -> `bfaadil+globex@gmail.com`
-- INITECH -> `bfaadil+initech@gmail.com`
+## 12. Preserved real failure
 
-The three plus-address aliases intentionally route to one controlled Gmail mailbox so recipient-side delivery can be inspected without creating fake customer accounts.
-
-## 11. Preserved real failure
-
-The first external GLOBEX target `bfaadilglobex@gmail.com` had never been created. Gmail initially accepted the provider-side send and returned a message ID, but later produced `550 5.1.1 No Such User`.
+The first external GLOBEX target did not exist. Gmail initially accepted the provider-side send and returned a message ID, but later produced `550 5.1.1 No Such User`.
 
 PERTAIN preserves both facts:
-
 - provider acceptance occurred;
 - end-to-end recipient delivery did not.
 
-This failure is part of the evidence record and directly reinforces the rule that provider acceptance alone must not be presented as recipient delivery proof.
+This is why provider acceptance and delivery are separate evidence classes.
 
-## 12. Known limitations
+## 13. Known limitations
 
 - customer footprint quality is only as good as the authoritative source;
 - arbitrary natural-language SLA interpretation is out of scope;
 - semantic model evaluation remains bounded, not universal;
-- provider authentication hardening is hackathon-grade, not production-grade;
-- current public negative-event anchor is anecdotal;
-- recipient proof uses a controlled Gmail plus-address fixture, not independent customer domains;
+- provider authentication is hackathon-grade, not production-grade;
+- public negative-event anchor is anecdotal;
+- recipient proof uses tagged identities in one controlled mailbox, not independent customer domains;
 - there is no production security review, live customer deployment or measured business-outcome study.
 
-## 13. Release strategy
+## 14. Release strategy
 
 Primary: **Cloudflare Workers** using the OpenNext Cloudflare adapter.
 
-Fallback: Vercel only if Cloudflare release is blocked.
-
-The current head has a green OpenNext Cloudflare build in GitHub Actions. Public release remains downstream of Verification / Evaluation Lock.
+Public release rule:
+1. run current-head tests;
+2. run current-head Next.js build;
+3. run current-head Cloudflare/OpenNext build;
+4. keep public external sends disabled;
+5. deploy;
+6. record URL and final <=2 minute demo link in README.
