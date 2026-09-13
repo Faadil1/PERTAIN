@@ -1,0 +1,11 @@
+node_modules
+.next
+out
+.env
+.env.local
+.env.*.local
+.arga-session.json
+.env.arga-backup
+coverage
+*.log
+.DS_Store
