@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EvaluationReceipt, RecipientVerdict, SendReceipt } from "@/lib/types";
 
 const statusOrder = ["HOLD", "ALLOW", "UNKNOWN", "REVIEW"] as const;
+const workerFallback = [
+  { id: "claim", label: "CLAIM", source: "semantic mapper" },
+  { id: "customer", label: "CUSTOMER", source: "Salesforce" },
+  { id: "incident", label: "INCIDENT", source: "Jira" },
+] as const;
 
 function verdictClass(verdict: RecipientVerdict["verdict"]) {
   return `verdict verdict-${verdict.toLowerCase()}`;
@@ -115,9 +120,42 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className="worker-section">
+        <div className="section-heading">
+          <span className="step-index">02 / CONCURRENT EVIDENCE WORKERS</span>
+          <p>Three independent evidence jobs run in parallel, then converge into deterministic policy.</p>
+        </div>
+
+        <div className="worker-grid">
+          {workerFallback.map((fallback) => {
+            const worker = evaluation?.workers?.find((item) => item.id === fallback.id);
+            const failed = worker?.status === "FAILED_CLOSED";
+            return (
+              <article key={fallback.id} className={`worker-card ${failed ? "worker-failed" : worker ? "worker-ok" : "worker-pending"}`}>
+                <div className="worker-head">
+                  <span className="worker-label">{fallback.label}</span>
+                  <span className="worker-status">
+                    {worker ? (failed ? "FAIL CLOSED" : "VERIFIED") : "RUNNING"}
+                  </span>
+                </div>
+                <strong>{worker?.source || fallback.source}</strong>
+                <p>{worker?.summary || "Reading evidence…"}</p>
+                <small>{worker ? `${worker.durationMs} ms` : "parallel"}</small>
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="adjudicator-strip">
+          <span>PARALLEL EVIDENCE READS</span>
+          <strong>→ DETERMINISTIC ADJUDICATOR →</strong>
+          <span>CUSTOMER-SPECIFIC TRUTH</span>
+        </div>
+      </section>
+
       <section className="switchboard-section">
         <div className="section-heading">
-          <span className="step-index">02 / CUSTOMER TRUTH ENVELOPES</span>
+          <span className="step-index">03 / CUSTOMER TRUTH ENVELOPES</span>
           <p>Same statement. Evaluated separately against each customer&apos;s actual dependencies.</p>
         </div>
 
@@ -149,10 +187,8 @@ export default function HomePage() {
 
       <section className="dispatch-control">
         <div>
-          <span className="step-index">03 / CONTROLLED SIDE EFFECT</span>
-          <h3>
-            Send only to the audience the evidence supports.
-          </h3>
+          <span className="step-index">04 / CONTROLLED SIDE EFFECT</span>
+          <h3>Send only to the audience the evidence supports.</h3>
           <p>
             Allowed set: <strong>{evaluation?.allowedEmails.join(", ") || "—"}</strong>
           </p>
