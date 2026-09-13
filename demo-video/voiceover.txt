@@ -1,0 +1,17 @@
+PERTAIN is built for one moment: when an incident update looks safe to send, but the same sentence is not actually true for every customer.
+
+Here is the message under test: “Your production workflows are fully restored.”
+
+The pain is simple. During an outage, teams are moving fast. One recovery update can reach many customers, even though each customer depends on different services, regions, and obligations.
+
+That creates the real problem: global incident language is often evaluated globally, while customer reality is not.
+
+PERTAIN’s differentiator is the customer truth partition. The copy stays exactly the same. PERTAIN checks that one sentence against live customer dependency data from Salesforce and live incident state from Jira, then partitions the intended audience.
+
+ACME is HOLD because EU Auth is still degraded. GLOBEX is ALLOW because its required US dependencies are healthy. INITECH is UNKNOWN because the dependency map is missing.
+
+The execution path is bounded. Gmail supplies the exact draft. A model maps the language into a small semantic contract. Salesforce and Jira provide the evidence. Then deterministic policy — not the model — owns HOLD, ALLOW, UNKNOWN, REVIEW, and the final recipient set.
+
+The evidence is real. We proved a three-app external runtime, a model-backed semantic path, twenty out of twenty bounded controls, a stale-evidence run that collapsed the allowed set to zero, and one guarded external delivery to the only ALLOW recipient. We also preserved a real failed delivery instead of hiding it.
+
+That is the story of PERTAIN: one statement, three customer truths, and only evidence-supported recipients are allowed to move.
