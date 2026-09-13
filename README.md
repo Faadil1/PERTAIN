@@ -292,4 +292,4 @@ It does **not** claim:
 
 ## License
 
-Hackathon prototype. Add an explicit project license before broader reuse if required.
+MIT — see [`LICENSE`](LICENSE).
