@@ -1,0 +1,19 @@
+{
+  "name": "pertain-demo-video",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "capture": "node capture.mjs",
+    "render": "remotion render src/index.ts PERTAINDemo out/pertain-demo.mp4 --codec=h264 --crf=18 --audio-codec=aac --audio-bitrate=192k",
+    "studio": "remotion studio src/index.ts --no-open"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.506",
+    "@remotion/media": "4.0.506",
+    "playwright": "1.55.0",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "remotion": "4.0.506"
+  },
+  "devDependencies": {}
+}
