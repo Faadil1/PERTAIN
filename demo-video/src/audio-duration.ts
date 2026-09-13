@@ -1,0 +1,1 @@
+export const AUDIO_DURATION_SECONDS = 110;
