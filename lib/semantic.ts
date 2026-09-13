@@ -32,6 +32,39 @@ function deterministicFallback(message: string): ParsedClaim {
   };
 }
 
+/**
+ * Canonicalize only phrases whose bounded meaning is explicit in the product
+ * contract. The model still performs semantic mapping, but cannot narrow an
+ * unambiguously global recovery statement into an invented service name.
+ * This keeps model output as evidence while deterministic code owns the safety
+ * boundary.
+ */
+export function canonicalizeMappedClaim(message: string, claim: ParsedClaim): ParsedClaim {
+  const text = message.toLowerCase();
+
+  if (text.includes("fully restored") || text.includes("all services") || text.includes("all workflows")) {
+    return {
+      ...claim,
+      predicate: "ALL_RELEVANT_SERVICES_HEALTHY",
+      services: [],
+      regions: ["ALL"],
+      certainty: "explicit",
+    };
+  }
+
+  if (text.includes("no customer impact") || text.includes("no impact")) {
+    return {
+      ...claim,
+      predicate: "NO_RELEVANT_CUSTOMER_IMPACT",
+      services: [],
+      regions: ["ALL"],
+      certainty: "explicit",
+    };
+  }
+
+  return claim;
+}
+
 function isParsedClaim(value: unknown): value is Omit<ParsedClaim, "source"> {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
@@ -73,7 +106,7 @@ export async function parseClaim(message: string): Promise<ParsedClaim> {
           {
             role: "system",
             content:
-              "You are a bounded semantic mapper. Return JSON only with keys predicate, services, regions, certainty. predicate must be one of ALL_RELEVANT_SERVICES_HEALTHY, NO_RELEVANT_CUSTOMER_IMPACT, SCOPED_SERVICES_HEALTHY. services and regions are arrays of strings. certainty is explicit or ambiguous. Never decide whether a customer is safe; only map the message meaning.",
+              "You are a bounded semantic mapper. Return JSON only with keys predicate, services, regions, certainty. predicate must be one of ALL_RELEVANT_SERVICES_HEALTHY, NO_RELEVANT_CUSTOMER_IMPACT, SCOPED_SERVICES_HEALTHY. services and regions are arrays of strings. certainty is explicit or ambiguous. Never decide whether a customer is safe; only map the message meaning. Statements that say workflows or services are fully restored are global recovery claims and should map to ALL_RELEVANT_SERVICES_HEALTHY with an empty services array. Do not invent a service name from generic words such as production workflows.",
           },
           { role: "user", content: message },
         ],
@@ -89,7 +122,7 @@ export async function parseClaim(message: string): Promise<ParsedClaim> {
     if (!raw) return deterministicFallback(message);
     const parsed = JSON.parse(raw) as unknown;
     if (!isParsedClaim(parsed)) return deterministicFallback(message);
-    return { ...parsed, source: "model" };
+    return canonicalizeMappedClaim(message, { ...parsed, source: "model" });
   } catch {
     return deterministicFallback(message);
   }
