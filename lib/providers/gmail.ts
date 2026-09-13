@@ -97,6 +97,7 @@ export async function sendMessage(input: {
       email: input.email,
       attempted: true,
       verified: true,
+      proofMode: "SIMULATED_FIXTURE",
       providerMessageId: `demo-sent-${input.email}`,
     };
   }
@@ -108,16 +109,31 @@ export async function sendMessage(input: {
       body: JSON.stringify({ raw: base64UrlEncode(raw) }),
     });
     if (!response.ok) {
-      return { email: input.email, attempted: true, verified: false, error: `Gmail send failed: ${response.status}` };
+      return {
+        email: input.email,
+        attempted: true,
+        verified: false,
+        proofMode: "EXTERNAL",
+        error: `Gmail send failed: ${response.status}`,
+      };
     }
     const sent = (await response.json()) as { id?: string };
-    if (!sent.id) return { email: input.email, attempted: true, verified: false, error: "Gmail returned no message id" };
+    if (!sent.id) {
+      return {
+        email: input.email,
+        attempted: true,
+        verified: false,
+        proofMode: "EXTERNAL",
+        error: "Gmail returned no message id",
+      };
+    }
 
     const verify = await gmailFetch(`/gmail/v1/users/me/messages/${encodeURIComponent(sent.id)}?format=minimal`);
     return {
       email: input.email,
       attempted: true,
       verified: verify.ok,
+      proofMode: "EXTERNAL",
       providerMessageId: sent.id,
       error: verify.ok ? undefined : `Gmail verification failed: ${verify.status}`,
     };
@@ -126,6 +142,7 @@ export async function sendMessage(input: {
       email: input.email,
       attempted: true,
       verified: false,
+      proofMode: "EXTERNAL",
       error: error instanceof Error ? error.message : "Unknown Gmail error",
     };
   }

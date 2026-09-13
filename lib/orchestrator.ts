@@ -90,6 +90,11 @@ const unavailableIncident: IncidentTruth = {
   source: "unavailable",
 };
 
+function configuredMaxEvidenceAgeMinutes() {
+  const raw = Number(process.env.PERTAIN_EVIDENCE_MAX_AGE_MINUTES ?? "30");
+  return Number.isFinite(raw) && raw > 0 ? raw : 30;
+}
+
 export async function evaluateMessage(): Promise<EvaluationReceipt> {
   const draft = await loadDraft();
 
@@ -125,12 +130,19 @@ export async function evaluateMessage(): Promise<EvaluationReceipt> {
   const incident = incidentWorker.value ?? unavailableIncident;
   const workers = [claimWorker.trace, customerWorker.trace, incidentWorker.trace];
 
-  const recipients = customers.map((customer) => evaluateRecipient(customer, incident, claim));
-  const byVerdict = (verdict: Verdict) => recipients.filter((item) => item.verdict === verdict).map((item) => item.email);
+  const recipients = customers.map((customer) =>
+    evaluateRecipient(customer, incident, claim, {
+      maxEvidenceAgeMinutes: configuredMaxEvidenceAgeMinutes(),
+    }),
+  );
+  const byVerdict = (verdict: Verdict) =>
+    recipients.filter((item) => item.verdict === verdict).map((item) => item.email);
+
+  const mode = process.env.PERTAIN_DEMO_MODE === "1" ? "seeded-demo" : "external";
 
   return {
     runId: makeRunId(),
-    mode: process.env.PERTAIN_DEMO_MODE === "1" ? "seeded-demo" : "external",
+    mode,
     createdAt: new Date().toISOString(),
     draft,
     claim,
@@ -141,18 +153,36 @@ export async function evaluateMessage(): Promise<EvaluationReceipt> {
     blockedEmails: byVerdict("HOLD"),
     unknownEmails: byVerdict("UNKNOWN"),
     reviewEmails: byVerdict("REVIEW"),
+    truthBoundary: {
+      evidence: mode === "external" ? "EXTERNAL" : "FIXTURE",
+      semanticMapping: claim.source === "model" ? "MODEL" : "DETERMINISTIC_FALLBACK",
+      sideEffects: mode === "external" ? "EXTERNAL" : "SIMULATED_FIXTURE",
+    },
   };
 }
 
-export async function executeAllowedSend(receipt: EvaluationReceipt): Promise<SendReceipt> {
+export function buildSendPlan(receipt: EvaluationReceipt) {
   const allowedSet = new Set(receipt.allowedEmails.map((email) => email.toLowerCase()));
-  const uniqueAllowed = Array.from(new Set(receipt.draft.recipients.filter((email) => allowedSet.has(email.toLowerCase()))));
+  const allowedRecipients = Array.from(
+    new Set(
+      receipt.draft.recipients
+        .filter((email) => allowedSet.has(email.toLowerCase()))
+        .map((email) => email.toLowerCase()),
+    ),
+  );
+
   const notSent = receipt.recipients
     .filter((recipient) => recipient.verdict !== "ALLOW")
     .map((recipient) => ({ email: recipient.email, reason: recipient.verdict }));
 
+  return { allowedRecipients, notSent };
+}
+
+export async function executeAllowedSend(receipt: EvaluationReceipt): Promise<SendReceipt> {
+  const { allowedRecipients, notSent } = buildSendPlan(receipt);
   const allowed = [];
-  for (const email of uniqueAllowed) {
+
+  for (const email of allowedRecipients) {
     allowed.push(
       await sendMessage({
         email,
@@ -163,8 +193,10 @@ export async function executeAllowedSend(receipt: EvaluationReceipt): Promise<Se
   }
 
   return {
-    runId: receipt.runId,
+    runId: makeRunId(),
+    policyRunId: receipt.runId,
     attemptedAt: new Date().toISOString(),
+    proofMode: receipt.truthBoundary.sideEffects,
     allowed,
     notSent,
   };

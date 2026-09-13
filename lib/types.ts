@@ -2,6 +2,7 @@ export type Verdict = "ALLOW" | "HOLD" | "UNKNOWN" | "REVIEW";
 export type ServiceHealth = "HEALTHY" | "DEGRADED" | "DOWN" | "UNKNOWN";
 export type EvidenceWorkerId = "claim" | "customer" | "incident";
 export type EvidenceWorkerStatus = "OK" | "FAILED_CLOSED";
+export type SideEffectMode = "SIMULATED_FIXTURE" | "EXTERNAL";
 
 export type ClaimPredicate =
   | "ALL_RELEVANT_SERVICES_HEALTHY"
@@ -70,7 +71,14 @@ export interface RecipientVerdict {
   verdict: Verdict;
   reason: string;
   decisiveService?: string;
+  obligations?: string[];
   evidence: EvidenceFact[];
+}
+
+export interface TruthBoundary {
+  evidence: "FIXTURE" | "EXTERNAL";
+  semanticMapping: "MODEL" | "DETERMINISTIC_FALLBACK";
+  sideEffects: SideEffectMode;
 }
 
 export interface EvaluationReceipt {
@@ -86,19 +94,23 @@ export interface EvaluationReceipt {
   blockedEmails: string[];
   unknownEmails: string[];
   reviewEmails: string[];
+  truthBoundary: TruthBoundary;
 }
 
 export interface SendResult {
   email: string;
   attempted: boolean;
   verified: boolean;
+  proofMode: SideEffectMode;
   providerMessageId?: string;
   error?: string;
 }
 
 export interface SendReceipt {
   runId: string;
+  policyRunId: string;
   attemptedAt: string;
+  proofMode: SideEffectMode;
   allowed: SendResult[];
   notSent: Array<{ email: string; reason: Verdict }>;
 }

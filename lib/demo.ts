@@ -1,5 +1,7 @@
 import type { CustomerFootprint, DraftMessage, IncidentTruth } from "./types";
 
+const now = () => new Date().toISOString();
+
 export const demoDraft: DraftMessage = {
   id: "draft-hero-001",
   subject: "Incident update — production workflows",
@@ -15,7 +17,7 @@ export const demoCustomers: CustomerFootprint[] = [
     email: "ops@acme.example",
     services: ["Production Workflows", "EU Auth"],
     regions: ["EU"],
-    obligations: ["Enterprise support"],
+    obligations: ["Enterprise", "99.99% SLA", "EU production critical"],
     source: "demo",
   },
   {
@@ -24,7 +26,7 @@ export const demoCustomers: CustomerFootprint[] = [
     email: "ops@globex.example",
     services: ["Production Workflows", "US Auth"],
     regions: ["US"],
-    obligations: ["Enterprise support"],
+    obligations: ["Enterprise", "99.9% SLA", "US production"],
     source: "demo",
   },
   {
@@ -33,17 +35,20 @@ export const demoCustomers: CustomerFootprint[] = [
     email: "ops@initech.example",
     services: null,
     regions: ["US"],
-    obligations: ["Enterprise support"],
+    obligations: ["Enterprise", "dependency map incomplete"],
     source: "demo",
   },
 ];
 
-export const demoIncident: IncidentTruth = {
-  incidentId: "INC-1042",
-  source: "demo",
-  services: [
-    { service: "Production Workflows", health: "HEALTHY", issueKey: "INC-1042" },
-    { service: "EU Auth", health: "DEGRADED", issueKey: "INC-1043" },
-    { service: "US Auth", health: "HEALTHY", issueKey: "INC-1044" },
-  ],
-};
+export function demoIncident(): IncidentTruth {
+  const updatedAt = now();
+  return {
+    incidentId: "INC-1042",
+    source: "demo",
+    services: [
+      { service: "Production Workflows", health: "HEALTHY", issueKey: "INC-1042", updatedAt },
+      { service: "EU Auth", health: "DEGRADED", issueKey: "INC-1043", updatedAt },
+      { service: "US Auth", health: "HEALTHY", issueKey: "INC-1044", updatedAt },
+    ],
+  };
+}
