@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 Build: Multi-App AI Agent Hackathon
-Status: `PBPD_BUILD_IN_PROGRESS__EXTERNAL_PROOF_PENDING`
+Status: `VERIFICATION_EXTERNAL_PROOF_PASS__EVALUATION_LOCK_PENDING`
 
 ## 1. Product invariant
 
@@ -77,6 +77,8 @@ When the operator triggers the side effect, `/api/send` performs a fresh server-
 
 This prevents a modified browser payload from adding a forbidden recipient to the send set.
 
+The external guarded-send proof additionally reproduced the exact recipient identities and `HOLD / ALLOW / UNKNOWN` partition immediately before the side effect.
+
 ## 6. Freshness guard
 
 Incident service evidence may include `updatedAt`.
@@ -84,6 +86,8 @@ Incident service evidence may include `updatedAt`.
 If a relevant service record is older than `PERTAIN_EVIDENCE_MAX_AGE_MINUTES` (default 30), the customer fails closed to `UNKNOWN`.
 
 A stale green status is therefore not accepted as proof of safe communication.
+
+This behavior was demonstrated externally in run `pertain-1789335872938-1bihxx`: stale Jira evidence caused all three recipients to become `UNKNOWN`, `allowedRecipients=[]`, and no send occurred.
 
 ## 7. Side-effect proof
 
@@ -99,6 +103,17 @@ Every send result records:
 `SIMULATED_FIXTURE` is clearly labeled and is not presented as external proof.
 
 `EXTERNAL` send results are only reported verified when the provider read-back succeeds.
+
+The final controlled external proof used:
+
+- fresh pre-send policy run: `pertain-1789336205624-k44jkw`;
+- send run: `pertain-1789336206618-68gnuf`;
+- sole authorized recipient: `bfaadil+globex@gmail.com`;
+- Gmail provider message ID: `1a09cbf93cdb9997`;
+- provider result: `attempted=true`, `verified=true`, `proofMode=EXTERNAL`;
+- ACME remained `HOLD` and INITECH remained `UNKNOWN` in `notSent`.
+
+Recipient-side verification in the controlled Gmail mailbox found the exact provider message in `INBOX` addressed to `bfaadil+globex@gmail.com`, with subject `PERTAIN incident recovery update` and body `Your production workflows are fully restored.`. Matching `INBOX` searches for tagged ACME and INITECH returned no messages.
 
 ## 8. Reliability suite — 20 bounded controls
 
@@ -125,7 +140,14 @@ The current suite covers:
 19. send plan includes only `ALLOW`
 20. duplicate intended recipients are deduped
 
-The suite deliberately includes negative and insufficient-evidence behavior, not only happy paths.
+GitHub Actions run `34778658716` on head `322016ed95e5fdb8f6649083d7bf7135260e3af1` executed the suite with:
+
+- tests: `20`
+- pass: `20`
+- fail: `0`
+- skipped: `0`
+
+The same run also passed `npm run build` and `npm run build:cloudflare`.
 
 ## 9. Real negative event
 
@@ -145,33 +167,51 @@ This is not treated as market-size proof. It is a real failure anchor that infor
 
 > Do not assume one global incident statement is safe for every customer.
 
-## 10. Multi-app proof contract
+## 10. Multi-app proof contract — satisfied under controlled external fixture
 
-Before terminal readiness, PERTAIN must preserve evidence that:
+PERTAIN now preserves evidence that:
 
-- the proposed communication comes from a real external app surface;
-- customer-specific truth comes from a distinct app surface;
-- incident/service truth comes from a distinct app surface;
-- the expected partition is produced from those external reads;
-- only `ALLOW` receives the permitted external side effect;
-- `HOLD / UNKNOWN / REVIEW` receive zero forbidden side effects;
-- the permitted side effect is externally verified.
+- the proposed communication comes from Gmail;
+- customer-specific truth comes from Salesforce;
+- incident/service truth comes from Jira;
+- a fresh combined runtime produces `ACME=HOLD / GLOBEX=ALLOW / INITECH=UNKNOWN`;
+- only tagged GLOBEX receives the permitted external side effect;
+- tagged ACME and INITECH receive zero matching controlled-inbox deliveries;
+- the permitted Gmail side effect is provider-verified and recipient-visible in the controlled mailbox.
 
-Seeded mode does not satisfy this final proof by itself.
+Controlled fixture identities:
 
-## 11. Known limitations
+- ACME -> `bfaadil+acme@gmail.com`
+- GLOBEX -> `bfaadil+globex@gmail.com`
+- INITECH -> `bfaadil+initech@gmail.com`
+
+The three plus-address aliases intentionally route to one controlled Gmail mailbox so recipient-side delivery can be inspected without creating fake customer accounts.
+
+## 11. Preserved real failure
+
+The first external GLOBEX target `bfaadilglobex@gmail.com` had never been created. Gmail initially accepted the provider-side send and returned a message ID, but later produced `550 5.1.1 No Such User`.
+
+PERTAIN preserves both facts:
+
+- provider acceptance occurred;
+- end-to-end recipient delivery did not.
+
+This failure is part of the evidence record and directly reinforces the rule that provider acceptance alone must not be presented as recipient delivery proof.
+
+## 12. Known limitations
 
 - customer footprint quality is only as good as the authoritative source;
 - arbitrary natural-language SLA interpretation is out of scope;
 - semantic model evaluation remains bounded, not universal;
 - provider authentication hardening is hackathon-grade, not production-grade;
 - current public negative-event anchor is anecdotal;
-- external three-app proof is pending until configured credentials/test surfaces are exercised.
+- recipient proof uses a controlled Gmail plus-address fixture, not independent customer domains;
+- there is no production security review, live customer deployment or measured business-outcome study.
 
-## 12. Release strategy
+## 13. Release strategy
 
 Primary: **Cloudflare Workers** using the OpenNext Cloudflare adapter.
 
 Fallback: Vercel only if Cloudflare release is blocked.
 
-Reason: protect a constrained Vercel daily build quota and keep final release independent of preview-build exhaustion.
+The current head has a green OpenNext Cloudflare build in GitHub Actions. Public release remains downstream of Verification / Evaluation Lock.
