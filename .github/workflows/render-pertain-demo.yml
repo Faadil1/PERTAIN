@@ -1,0 +1,83 @@
+name: Render PERTAIN Demo
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'demo-video/src/**'
+      - 'demo-video/capture.mjs'
+      - 'demo-video/package.json'
+      - '.github/workflows/render-pertain-demo.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: demo-video/package.json
+
+      - name: Install Remotion dependencies
+        working-directory: demo-video
+        run: npm install
+
+      - name: Install Chromium
+        working-directory: demo-video
+        run: npx playwright install --with-deps chromium
+
+      - name: Download synchronized voiceover
+        working-directory: demo-video
+        run: |
+          mkdir -p public
+          curl -L --fail --retry 3 'https://www.aidocmaker.com/g0/audio?name=431eef8d6e474439ab030af8e09ff30b' -o public/voiceover.mp3
+          test -s public/voiceover.mp3
+          file public/voiceover.mp3
+
+      - name: Lock composition duration to voiceover
+        working-directory: demo-video
+        run: |
+          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 public/voiceover.mp3)
+          node -e "const fs=require('fs'); const d=Number(process.argv[1]); if(!Number.isFinite(d)||d<20) process.exit(2); fs.writeFileSync('src/audio-duration.ts', 'export const AUDIO_DURATION_SECONDS = '+JSON.stringify(d+0.35)+';\n'); console.log('Voiceover seconds:', d);" "$DURATION"
+
+      - name: Capture live Cloudflare product
+        working-directory: demo-video
+        env:
+          PERTAIN_URL: https://pertain.faadil-casecraft.workers.dev/
+        run: npm run capture
+
+      - name: Render Remotion demo
+        working-directory: demo-video
+        run: |
+          mkdir -p out
+          npm run render
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 out/pertain-demo.mp4
+
+      - name: Upload demo artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pertain-demo-video
+          path: demo-video/out/pertain-demo.mp4
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish rendered MP4 to repository
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f demo-video/out/pertain-demo.mp4
+          if git diff --cached --quiet; then
+            echo 'No video change to publish.'
+            exit 0
+          fi
+          git commit -m 'demo: publish synchronized Remotion video [skip ci]'
+          git push
