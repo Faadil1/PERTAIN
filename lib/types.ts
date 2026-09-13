@@ -1,5 +1,7 @@
 export type Verdict = "ALLOW" | "HOLD" | "UNKNOWN" | "REVIEW";
 export type ServiceHealth = "HEALTHY" | "DEGRADED" | "DOWN" | "UNKNOWN";
+export type EvidenceWorkerId = "claim" | "customer" | "incident";
+export type EvidenceWorkerStatus = "OK" | "FAILED_CLOSED";
 
 export type ClaimPredicate =
   | "ALL_RELEVANT_SERVICES_HEALTHY"
@@ -29,7 +31,7 @@ export interface CustomerFootprint {
   services: string[] | null;
   regions: string[];
   obligations?: string[];
-  source: "salesforce" | "demo";
+  source: "salesforce" | "demo" | "unavailable";
 }
 
 export interface IncidentServiceState {
@@ -42,7 +44,17 @@ export interface IncidentServiceState {
 export interface IncidentTruth {
   incidentId: string;
   services: IncidentServiceState[];
-  source: "jira" | "demo";
+  source: "jira" | "demo" | "unavailable";
+}
+
+export interface EvidenceWorkerTrace {
+  id: EvidenceWorkerId;
+  label: string;
+  source: string;
+  status: EvidenceWorkerStatus;
+  startedAt: string;
+  durationMs: number;
+  summary: string;
 }
 
 export interface EvidenceFact {
@@ -68,6 +80,7 @@ export interface EvaluationReceipt {
   draft: DraftMessage;
   claim: ParsedClaim;
   incident: IncidentTruth;
+  workers: EvidenceWorkerTrace[];
   recipients: RecipientVerdict[];
   allowedEmails: string[];
   blockedEmails: string[];
